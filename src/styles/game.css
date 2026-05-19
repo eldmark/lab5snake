@@ -50,6 +50,16 @@ button:focus-visible {
   outline-offset: 3px;
 }
 
+.secondary-button {
+  background: rgba(247, 251, 255, 0.1);
+  border: 1px solid rgba(247, 251, 255, 0.18);
+  color: #f7fbff;
+}
+
+.secondary-button:hover {
+  background: rgba(247, 251, 255, 0.18);
+}
+
 .game-shell {
   align-items: center;
   background:
@@ -63,7 +73,7 @@ button:focus-visible {
 
 .game-panel {
   position: relative;
-  width: min(100%, 620px);
+  width: min(100%, 680px);
 }
 
 .game-header,
@@ -75,6 +85,7 @@ button:focus-visible {
 }
 
 .game-header {
+  align-items: flex-start;
   margin-bottom: 1rem;
 }
 
@@ -87,6 +98,22 @@ button:focus-visible {
 .score-row {
   display: flex;
   gap: 0.75rem;
+}
+
+.in-game-score {
+  margin-bottom: 1rem;
+}
+
+.menu-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.menu-row button {
+  min-height: 38px;
+  padding: 0.55rem 0.8rem;
 }
 
 .eyebrow {
@@ -169,6 +196,12 @@ h1 {
   background: linear-gradient(135deg, #d5f982, #59d779);
 }
 
+.snake-tail-white {
+  background: linear-gradient(135deg, #ffffff, #dfe9e3);
+  border-color: rgba(247, 251, 255, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(17, 29, 22, 0.12);
+}
+
 .food-cell {
   background: radial-gradient(circle at 35% 35%, #fff1ab 0 14%, #f35b55 16% 70%);
   border-radius: 50%;
@@ -176,20 +209,120 @@ h1 {
   margin: 12%;
 }
 
+.splash-screen,
+.content-screen {
+  background: rgba(247, 251, 255, 0.08);
+  border: 1px solid rgba(247, 251, 255, 0.15);
+  border-radius: 8px;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.32);
+  padding: clamp(1.25rem, 4vw, 3rem);
+}
+
+.splash-screen {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: min(620px, calc(100vh - 3rem));
+}
+
+.splash-screen h1 {
+  font-size: 7rem;
+}
+
+.splash-copy,
+.content-screen p,
+.rules-list,
+.empty-state {
+  color: #dce8e1;
+}
+
+.splash-copy {
+  font-size: 1.2rem;
+  margin: 1rem 0 1.8rem;
+  max-width: 30rem;
+}
+
+.splash-actions,
+.content-actions,
+.overlay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.content-screen h2 {
+  font-size: 4.2rem;
+  line-height: 1;
+  margin-bottom: 1.4rem;
+}
+
+.leaderboard-table {
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.leaderboard-table caption {
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  border-bottom: 1px solid rgba(247, 251, 255, 0.12);
+  padding: 0.85rem 1rem;
+  text-align: left;
+}
+
+.leaderboard-table th {
+  color: #a9bab2;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.leaderboard-table td:last-child,
+.leaderboard-table th:last-child {
+  text-align: right;
+}
+
+.leaderboard-table td:last-child {
+  color: #f2c94c;
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.leaderboard-table tr:first-child td:first-child {
+  color: #52d273;
+  font-weight: 800;
+}
+
+.rules-list {
+  display: grid;
+  gap: 0.85rem;
+  list-style-position: inside;
+  margin: 0 0 1.7rem;
+  padding: 0;
+}
+
+.empty-state {
+  margin-bottom: 1.5rem;
+}
+
 .status-overlay {
   align-items: center;
   background: rgba(9, 12, 10, 0.88);
   border: 1px solid rgba(247, 251, 255, 0.16);
   border-radius: 8px;
-  bottom: 4.8rem;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  left: 1.25rem;
   padding: 2rem;
   position: absolute;
-  right: 1.25rem;
-  top: 6.8rem;
+  inset: 11.2rem 1.25rem 4.8rem;
   text-align: center;
 }
 
@@ -219,6 +352,14 @@ h1 {
     flex-direction: column;
   }
 
+  .menu-row {
+    justify-content: stretch;
+  }
+
+  .menu-row button {
+    flex: 1 1 9rem;
+  }
+
   .score-row {
     flex-direction: column;
   }
@@ -233,17 +374,25 @@ h1 {
   }
 
   .status-overlay {
-    bottom: 5.6rem;
-    left: 0.75rem;
-    right: 0.75rem;
-    top: 8.7rem;
+    inset: 17rem 0.75rem 5.6rem;
   }
 
   h1 {
     font-size: 2.75rem;
   }
 
+  .splash-screen h1,
+  .content-screen h2 {
+    font-size: 2.75rem;
+  }
+
   .status-overlay h2 {
     font-size: 2.4rem;
+  }
+
+  .splash-actions button,
+  .content-actions button,
+  .overlay-actions button {
+    width: 100%;
   }
 }

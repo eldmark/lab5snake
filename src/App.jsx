@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Board from './components/Board.jsx';
 import HighScore from './components/HighScore.jsx';
+import LeaderboardTable from './components/LeaderboardTable.jsx';
 import Score from './components/Score.jsx';
 
 const BOARD_SIZE = 20;
 const GAME_SPEED = 130;
 const HIGH_SCORE_ENDPOINT = '/api/highscore';
+const MAX_HIGH_SCORES = 10;
 const INITIAL_SNAKE = [
   { x: 9, y: 10 },
   { x: 8, y: 10 },
@@ -13,6 +15,12 @@ const INITIAL_SNAKE = [
 ];
 const INITIAL_DIRECTION = { x: 1, y: 0 };
 const STARTING_FOOD = { x: 14, y: 10 };
+const SCREENS = {
+  splash: 'splash',
+  game: 'game',
+  leaderboard: 'leaderboard',
+  howToPlay: 'howToPlay',
+};
 
 const directionsByKey = {
   ArrowUp: { x: 0, y: -1 },
@@ -41,6 +49,22 @@ function isOutsideBoard(position) {
   );
 }
 
+function sortHighScores(scores) {
+  return scores
+    .map((score) => Number.parseInt(score, 10))
+    .filter((score) => Number.isFinite(score) && score > 0)
+    .sort((firstScore, secondScore) => secondScore - firstScore)
+    .slice(0, MAX_HIGH_SCORES);
+}
+
+function normalizeHighScores(data) {
+  if (Array.isArray(data.highScores)) {
+    return sortHighScores(data.highScores);
+  }
+
+  return sortHighScores([data.highScore]);
+}
+
 function createFood(snake) {
   const availableCells = [];
 
@@ -62,15 +86,15 @@ function createFood(snake) {
   return availableCells[randomIndex];
 }
 
-async function loadHighScore() {
+async function loadHighScores() {
   const response = await fetch(HIGH_SCORE_ENDPOINT);
 
   if (!response.ok) {
-    throw new Error('Unable to load high score');
+    throw new Error('Unable to load high scores');
   }
 
   const data = await response.json();
-  return Number.isFinite(data.highScore) ? data.highScore : 0;
+  return normalizeHighScores(data);
 }
 
 async function saveHighScore(score) {
@@ -87,19 +111,22 @@ async function saveHighScore(score) {
   }
 
   const data = await response.json();
-  return Number.isFinite(data.highScore) ? data.highScore : score;
+  return normalizeHighScores(data);
 }
 
 function App() {
+  const [screen, setScreen] = useState(SCREENS.splash);
   const [snake, setSnake] = useState(INITIAL_SNAKE);
   const [direction, setDirection] = useState(INITIAL_DIRECTION);
   const [food, setFood] = useState(STARTING_FOOD);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
+  const [leaderboard, setLeaderboard] = useState([]);
   const [isPaused, setIsPaused] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const audioContext = useRef(null);
   const lastMoveDirection = useRef(INITIAL_DIRECTION);
+  const recordedGameScore = useRef(null);
 
   const getAudioContext = useCallback(() => {
     const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
@@ -153,7 +180,9 @@ function App() {
 
   const resetGame = useCallback(() => {
     enableSound();
+    recordedGameScore.current = null;
     lastMoveDirection.current = INITIAL_DIRECTION;
+    setScreen(SCREENS.game);
     setSnake(INITIAL_SNAKE);
     setDirection(INITIAL_DIRECTION);
     setFood(STARTING_FOOD);
@@ -162,13 +191,31 @@ function App() {
     setIsGameOver(false);
   }, [enableSound]);
 
+  const openMenu = useCallback(() => {
+    enableSound();
+    setScreen(SCREENS.splash);
+    setIsPaused(true);
+  }, [enableSound]);
+
+  const openLeaderboard = useCallback(() => {
+    enableSound();
+    setScreen(SCREENS.leaderboard);
+    setIsPaused(true);
+  }, [enableSound]);
+
+  const openHowToPlay = useCallback(() => {
+    enableSound();
+    setScreen(SCREENS.howToPlay);
+    setIsPaused(true);
+  }, [enableSound]);
+
   const togglePause = useCallback(() => {
     enableSound();
 
-    if (!isGameOver) {
+    if (!isGameOver && screen === SCREENS.game) {
       setIsPaused((currentIsPaused) => !currentIsPaused);
     }
-  }, [enableSound, isGameOver]);
+  }, [enableSound, isGameOver, screen]);
 
   const moveSnake = useCallback(() => {
     setSnake((currentSnake) => {
@@ -204,10 +251,11 @@ function App() {
   useEffect(() => {
     let isSubscribed = true;
 
-    loadHighScore()
-      .then((savedHighScore) => {
+    loadHighScores()
+      .then((savedHighScores) => {
         if (isSubscribed) {
-          setHighScore(savedHighScore);
+          setLeaderboard(savedHighScores);
+          setHighScore(savedHighScores[0] ?? 0);
         }
       })
       .catch((error) => {
@@ -220,19 +268,28 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (score <= highScore) {
+    if (score > highScore) {
+      setHighScore(score);
+    }
+  }, [highScore, score]);
+
+  useEffect(() => {
+    if (!isGameOver || score <= 0 || recordedGameScore.current === score) {
       return;
     }
 
-    setHighScore(score);
+    recordedGameScore.current = score;
+    setLeaderboard((currentScores) => sortHighScores([...currentScores, score]));
+
     saveHighScore(score)
-      .then((savedHighScore) => {
-        setHighScore((currentHighScore) => Math.max(currentHighScore, savedHighScore));
+      .then((savedHighScores) => {
+        setLeaderboard(savedHighScores);
+        setHighScore(savedHighScores[0] ?? 0);
       })
       .catch((error) => {
         console.error(error);
       });
-  }, [highScore, score]);
+  }, [isGameOver, score]);
 
   useEffect(() => {
     if (score > 0) {
@@ -242,9 +299,21 @@ function App() {
 
   useEffect(() => {
     function handleKeyDown(event) {
+      if (event.key === 'Enter' && screen === SCREENS.splash) {
+        event.preventDefault();
+        resetGame();
+        return;
+      }
+
+      if (event.key === ' ' && screen === SCREENS.game) {
+        event.preventDefault();
+        togglePause();
+        return;
+      }
+
       const nextDirection = directionsByKey[event.key];
 
-      if (!nextDirection) {
+      if (!nextDirection || screen !== SCREENS.game) {
         return;
       }
 
@@ -269,10 +338,10 @@ function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [enableSound, isGameOver, isPaused]);
+  }, [enableSound, isGameOver, isPaused, resetGame, screen, togglePause]);
 
   useEffect(() => {
-    if (isGameOver || isPaused || food === null) {
+    if (screen !== SCREENS.game || isGameOver || isPaused || food === null) {
       return undefined;
     }
 
@@ -281,50 +350,134 @@ function App() {
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [food, isGameOver, isPaused, moveSnake]);
+  }, [food, isGameOver, isPaused, moveSnake, screen]);
+
+  const visibleHighScore = Math.max(highScore, score);
 
   return (
     <main className="game-shell">
       <section className="game-panel" aria-label="Snake game">
-        <div className="game-header">
-          <div>
-            <h1>Snake</h1>
-          </div>
-          <div className="score-row">
-            <Score score={score} />
-            <HighScore highScore={highScore} />
-          </div>
-        </div>
-
-        <Board snake={snake} food={food} boardSize={BOARD_SIZE} />
-
-        <div className="game-footer">
-          <button type="button" onClick={togglePause} disabled={isGameOver}>
-            {isPaused ? 'Resume' : 'Pause'}
-          </button>
-          <button type="button" onClick={resetGame}>
-            Restart
-          </button>
-        </div>
-
-        {isPaused && !isGameOver && (
-          <div className="status-overlay" role="status" aria-live="polite">
-            <h2>Paused</h2>
-            <button type="button" onClick={togglePause}>
-              Resume
-            </button>
+        {screen !== SCREENS.splash && (
+          <div className="game-header">
+            <div>
+              <p className="eyebrow">Classic Snake</p>
+              <h1>Snake</h1>
+            </div>
+            <nav className="menu-row" aria-label="Game menu">
+              <button type="button" className="secondary-button" onClick={openMenu}>
+                Menu
+              </button>
+              <button type="button" className="secondary-button" onClick={openLeaderboard}>
+                Leaderboard
+              </button>
+              <button type="button" className="secondary-button" onClick={openHowToPlay}>
+                How to Play
+              </button>
+            </nav>
           </div>
         )}
 
-        {isGameOver && (
-          <div className="status-overlay" role="status" aria-live="polite">
-            <h2>Game Over</h2>
-            <p>Final score: {score}</p>
-            <p>High score: {highScore}</p>
-            <button type="button" onClick={resetGame}>
-              Play again
-            </button>
-          </div>
+        {screen === SCREENS.splash && (
+          <section className="splash-screen" aria-labelledby="splash-title">
+            <p className="eyebrow">Classic Snake</p>
+            <h1 id="splash-title">Snake</h1>
+            <p className="splash-copy">
+              Eat red food, grow the snake, and keep the new striped tail alive.
+            </p>
+            <div className="splash-actions">
+              <button type="button" onClick={resetGame}>
+                Play
+              </button>
+              <button type="button" className="secondary-button" onClick={openLeaderboard}>
+                Leaderboard
+              </button>
+              <button type="button" className="secondary-button" onClick={openHowToPlay}>
+                How to Play
+              </button>
+            </div>
+          </section>
+        )}
+
+        {screen === SCREENS.game && (
+          <>
+            <div className="score-row in-game-score">
+              <Score score={score} />
+              <HighScore highScore={visibleHighScore} />
+            </div>
+
+            <Board snake={snake} food={food} boardSize={BOARD_SIZE} />
+
+            <div className="game-footer">
+              <button type="button" onClick={togglePause} disabled={isGameOver}>
+                {isPaused ? 'Resume' : 'Pause'}
+              </button>
+              <button type="button" onClick={resetGame}>
+                Restart
+              </button>
+            </div>
+
+            {isPaused && !isGameOver && (
+              <div className="status-overlay" role="status" aria-live="polite">
+                <h2>Paused</h2>
+                <button type="button" onClick={togglePause}>
+                  Resume
+                </button>
+              </div>
+            )}
+
+            {isGameOver && (
+              <div className="status-overlay" role="status" aria-live="polite">
+                <h2>Game Over</h2>
+                <p>Final score: {score}</p>
+                <p>High score: {visibleHighScore}</p>
+                <div className="overlay-actions">
+                  <button type="button" onClick={resetGame}>
+                    Play again
+                  </button>
+                  <button type="button" className="secondary-button" onClick={openLeaderboard}>
+                    Scores
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {screen === SCREENS.leaderboard && (
+          <section className="content-screen" aria-labelledby="leaderboard-title">
+            <p className="eyebrow">Score Table</p>
+            <h2 id="leaderboard-title">Leaderboard</h2>
+            <LeaderboardTable scores={leaderboard} />
+            <div className="content-actions">
+              <button type="button" onClick={resetGame}>
+                Play
+              </button>
+              <button type="button" className="secondary-button" onClick={openHowToPlay}>
+                How to Play
+              </button>
+            </div>
+          </section>
+        )}
+
+        {screen === SCREENS.howToPlay && (
+          <section className="content-screen" aria-labelledby="how-to-play-title">
+            <p className="eyebrow">Rules</p>
+            <h2 id="how-to-play-title">How to Play</h2>
+            <ul className="rules-list">
+              <li>Use the arrow keys to move the snake around the board.</li>
+              <li>Eat each red food ball to earn 10 points and grow longer.</li>
+              <li>Every third body segment is white, making the tail pattern two green and one white.</li>
+              <li>Avoid the walls and the snake tail. Press Space to pause or resume.</li>
+            </ul>
+            <div className="content-actions">
+              <button type="button" onClick={resetGame}>
+                Play
+              </button>
+              <button type="button" className="secondary-button" onClick={openLeaderboard}>
+                Leaderboard
+              </button>
+            </div>
+          </section>
         )}
       </section>
     </main>

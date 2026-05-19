@@ -6,6 +6,7 @@ import react from '@vitejs/plugin-react';
 
 const projectRoot = dirname(fileURLToPath(import.meta.url));
 const highScoreFile = join(projectRoot, 'data', 'highscore.txt');
+const MAX_HIGH_SCORES = 10;
 
 function parseScore(value) {
   const score = Number.parseInt(value, 10);
@@ -17,19 +18,36 @@ function parseScore(value) {
   return score;
 }
 
-async function writeHighScore(score) {
-  await mkdir(dirname(highScoreFile), { recursive: true });
-  await writeFile(highScoreFile, `${score}\n`, 'utf8');
+function sortHighScores(scores) {
+  return scores
+    .filter((score) => Number.isFinite(score) && score >= 0)
+    .sort((firstScore, secondScore) => secondScore - firstScore)
+    .slice(0, MAX_HIGH_SCORES);
 }
 
-async function readHighScore() {
+function parseHighScores(contents) {
+  return sortHighScores(
+    contents
+      .split(/[\s,]+/)
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .map(parseScore),
+  );
+}
+
+async function writeHighScores(scores) {
+  await mkdir(dirname(highScoreFile), { recursive: true });
+  await writeFile(highScoreFile, `${sortHighScores(scores).join('\n')}\n`, 'utf8');
+}
+
+async function readHighScores() {
   try {
     const contents = await readFile(highScoreFile, 'utf8');
-    return parseScore(contents.trim());
+    return parseHighScores(contents);
   } catch (error) {
     if (error.code === 'ENOENT') {
-      await writeHighScore(0);
-      return 0;
+      await writeHighScores([]);
+      return [];
     }
 
     throw error;
@@ -61,17 +79,18 @@ export default defineConfig({
         server.middlewares.use('/api/highscore', async (request, response, next) => {
           try {
             if (request.method === 'GET') {
-              sendJson(response, 200, { highScore: await readHighScore() });
+              const highScores = await readHighScores();
+              sendJson(response, 200, { highScore: highScores[0] ?? 0, highScores });
               return;
             }
 
             if (request.method === 'POST') {
               const body = await readJsonBody(request);
-              const currentHighScore = await readHighScore();
-              const nextHighScore = Math.max(currentHighScore, parseScore(body.score));
+              const currentHighScores = await readHighScores();
+              const highScores = sortHighScores([...currentHighScores, parseScore(body.score)]);
 
-              await writeHighScore(nextHighScore);
-              sendJson(response, 200, { highScore: nextHighScore });
+              await writeHighScores(highScores);
+              sendJson(response, 200, { highScore: highScores[0] ?? 0, highScores });
               return;
             }
 

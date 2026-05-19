@@ -9,11 +9,13 @@ npm install
 npm run dev
 ```
 
-The high score is saved by the Vite dev server in:
+The high scores are saved by the Vite dev server in:
 
 ```text
 data/highscore.txt
 ```
+
+Scores are stored one per line, with the old single-score format still supported.
 
 ## Structure
 
@@ -27,6 +29,7 @@ src/
     Board.jsx
     Food.jsx
     HighScore.jsx
+    LeaderboardTable.jsx
     Score.jsx
     Snake.jsx
   styles/
