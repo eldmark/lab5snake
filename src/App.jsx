@@ -98,9 +98,61 @@ function App() {
   const [highScore, setHighScore] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
+  const audioContext = useRef(null);
   const lastMoveDirection = useRef(INITIAL_DIRECTION);
 
+  const getAudioContext = useCallback(() => {
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+
+    if (!AudioContextConstructor) {
+      return null;
+    }
+
+    if (audioContext.current === null) {
+      audioContext.current = new AudioContextConstructor();
+    }
+
+    return audioContext.current;
+  }, []);
+
+  const enableSound = useCallback(() => {
+    const context = getAudioContext();
+
+    if (context?.state === 'suspended') {
+      context.resume().catch((error) => {
+        console.error(error);
+      });
+    }
+  }, [getAudioContext]);
+
+  const playEatSound = useCallback(() => {
+    const context = getAudioContext();
+
+    if (context === null || context.state === 'suspended') {
+      return;
+    }
+
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const startTime = context.currentTime;
+    const endTime = startTime + 0.12;
+
+    oscillator.type = 'square';
+    oscillator.frequency.setValueAtTime(520, startTime);
+    oscillator.frequency.exponentialRampToValueAtTime(880, endTime);
+
+    gain.gain.setValueAtTime(0.001, startTime);
+    gain.gain.exponentialRampToValueAtTime(0.12, startTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, endTime);
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(startTime);
+    oscillator.stop(endTime);
+  }, [getAudioContext]);
+
   const resetGame = useCallback(() => {
+    enableSound();
     lastMoveDirection.current = INITIAL_DIRECTION;
     setSnake(INITIAL_SNAKE);
     setDirection(INITIAL_DIRECTION);
@@ -108,13 +160,15 @@ function App() {
     setScore(0);
     setIsPaused(false);
     setIsGameOver(false);
-  }, []);
+  }, [enableSound]);
 
   const togglePause = useCallback(() => {
+    enableSound();
+
     if (!isGameOver) {
       setIsPaused((currentIsPaused) => !currentIsPaused);
     }
-  }, [isGameOver]);
+  }, [enableSound, isGameOver]);
 
   const moveSnake = useCallback(() => {
     setSnake((currentSnake) => {
@@ -181,6 +235,12 @@ function App() {
   }, [highScore, score]);
 
   useEffect(() => {
+    if (score > 0) {
+      playEatSound();
+    }
+  }, [playEatSound, score]);
+
+  useEffect(() => {
     function handleKeyDown(event) {
       const nextDirection = directionsByKey[event.key];
 
@@ -189,6 +249,7 @@ function App() {
       }
 
       event.preventDefault();
+      enableSound();
 
       if (isGameOver || isPaused) {
         return;
@@ -208,7 +269,7 @@ function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isGameOver, isPaused]);
+  }, [enableSound, isGameOver, isPaused]);
 
   useEffect(() => {
     if (isGameOver || isPaused || food === null) {
